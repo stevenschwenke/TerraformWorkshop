@@ -255,6 +255,26 @@ resource "aws_subnet" "subnet-1" {
 
 Resources don't need to be declared in a specific order, Terraform figures out what to create first by itself.
 
+== Output
+
+Within Terraform script, *output* can be defined like this (values from '_terraform state show aws_some_resource_'):
+
+[source,hcl-terraform]
+----
+# Print public IP of server after creation
+output "server_public_ip" {
+  value = aws_eip.aws_eip.public_ip
+}
+----
+
+As a best practice, outputs should reside in a file *outputs.tf*.
+
+After _terraform apply_, the outputs can be printed again using
+
+[source,terminal]
+----
+$ terraform ouput
+----
 
 == Useful Commands and Settings
 
@@ -284,16 +304,6 @@ $ terraform state list
 [source,terminal]
 ----
 $ terraform state show aws_some_resource
-----
-
-Within Terraform script, *output* can be defined like this (values from '_terraform state show aws_some_resource_'):
-
-[source,hcl-terraform]
-----
-# Print public IP of server after creation
-output "server_public_ip" {
-  value = aws_eip.aws_eip.public_ip
-}
 ----
 
 To *refresh* all states and run the outputs again (great for printing the IPs mentioned before):
