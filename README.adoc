@@ -2,12 +2,10 @@
 
 = Terraform Workshop
 
+* https://www.terraform.io[terraform.io]: "Terraform is an open-source infrastructure as code software tool that provides a consistent CLI workflow to manage hundreds of cloud services. Terraform codifies cloud APIs into declarative configuration files."
 * written in "HashiCorp Configuration Language" (HCL) in file with .tf extension
-* support to cloud vendor via https://registry.terraform.io/browse/providers[providers], which have to be downloaded when used
+* support to cloud vendor via https://registry.terraform.io/browse/providers[providers], which have to be downloaded from the https://registry.terraform.io[registry] when used
 * example: https://registry.terraform.io/providers/hashicorp/aws/latest/docs[Using AWS Provider]
-
-**All examples in this workshop will be executed in us-east-1 to follow along https://www.youtube.com/watch?v=SLB_c_ayRMo[this tutorial]**
-
 * benefit of Terraform: syntax for each provider is the same, hence not the specifics of a provider have to be learned, they are abstracted away by Terraform scripts that look the same for each provider.
 
 == Creating First Resources
@@ -80,6 +78,16 @@ commands will detect it and remind you to do so if necessary.
 ----
 
 **The automatically created file .terraform.lock.hcl should be added to version control!**
+
+**The automatically created file terraform.tfstate is needed to manage the state and must not be deleted. Also, in includes sensitive information and should not be put in version control!**
+
+Validate configuration with
+
+[source,terminal]
+----
+$ terraform validate
+Success! The configuration is valid.
+----
 
 List of all resources to be created with
 
@@ -257,6 +265,13 @@ To automatically *confirm* changes:
 $ terraform apply --auto-approve
 ----
 
+*Show current state*:
+
+[source,hcl-terraform]
+----
+$ terraform show
+----
+
 *List* all resources:
 
 [source,terminal]
@@ -357,7 +372,9 @@ When creating multiple variable files, the default name _terraform.tfvars_ canno
 $ terraform apply --var-file example.tfvars
 ----
 
-
+== Sources
+* https://www.youtube.com/watch?v=SLB_c_ayRMo["Terraform Course - Automate your AWS cloud infrastructure"], YouTube, 2:20:57
+* https://learn.hashicorp.com[HashiCorp Learn], tutorials from HashiCorp
 
 
 
