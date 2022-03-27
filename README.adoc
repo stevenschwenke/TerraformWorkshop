@@ -77,6 +77,8 @@ rerun this command to reinitialize your working directory. If you forget, other
 commands will detect it and remind you to do so if necessary.
 ----
 
+The command _terraform init_ is idempotent, it can be run multiple times in the same directory.
+
 **The automatically created file .terraform.lock.hcl should be added to version control!**
 
 **The automatically created file terraform.tfstate is needed to manage the state and must not be deleted. Also, in includes sensitive information and should not be put in version control!**
@@ -252,6 +254,8 @@ resource "aws_subnet" "subnet-1" {
   }
 }
 ----
+
+Using the _Name_-tag will allow easy identification of the created resource in the AWS web console because the name of resources will be shown there, if the tag is _Name_ (with upper-case!).
 
 Resources don't need to be declared in a specific order, Terraform figures out what to create first by itself.
 
