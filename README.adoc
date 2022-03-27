@@ -257,9 +257,49 @@ resource "aws_subnet" "subnet-1" {
 
 Using the _Name_-tag will allow easy identification of the created resource in the AWS web console because the name of resources will be shown there, if the tag is _Name_ (with upper-case!).
 
-Resources don't need to be declared in a specific order, Terraform figures out what to create first by itself.
+Resources don't need to be declared in a specific order, Terraform figures out what to create first by itself. It creates a dependency graph from all the references that can be printed with:
 
-== Output
+[source,terminal]
+----
+$ terraform graph
+----
+
+Output of _terraform graph_ is written in DOT and can be converted to images using tools like https://dreampuf.github.io/GraphvizOnline/[Graphviz Online].
+
+
+== User Data
+
+When starting an EC2 instance, user data can be defined to run some script after creation of the instance.
+
+.03-practice-project/main.tf
+[source,hcl-terraform]
+----
+resource "aws_instance" "web-server-instance" {
+  # Ubuntu Server 20.04 LTS
+  ami = "ami-04505e74c0741db8d"
+  instance_type = "t2.micro"
+  availability_zone = "us-east-1a"
+  key_name = "main-keypair"
+
+  network_interface {
+    device_index = 0
+    network_interface_id = aws_network_interface.web-server-nic.id
+  }
+
+  user_data = <<-EOF
+    #!/bin/bash
+    sudo apt update -y
+    sudo apt install apache2 -y
+    sudo systemctl start apache2
+    sudo bash -c 'echo your very first web server > /var/www/html/index.html'
+    EOF
+  tags = {
+    Name = "web-server"
+  }
+}
+----
+
+== Output Variables
 
 Within Terraform script, *output* can be defined like this (values from '_terraform state show aws_some_resource_'):
 
@@ -271,13 +311,37 @@ output "server_public_ip" {
 }
 ----
 
+_output_ can be every Terraform expression.
+
 As a best practice, outputs should reside in a file *outputs.tf*.
 
-After _terraform apply_, the outputs can be printed again using
+After _terraform apply_, *all* outputs can be printed again using
 
 [source,terminal]
 ----
-$ terraform ouput
+$ terraform output
+----
+
+*Certain* outputs can be printed using
+
+[source,terminal]
+----
+$ terraform output server_public_ip
+----
+
+Output variables may contain a configuration with the following parameters:
+
+* description
+* sensitive (true, if the output should not be printed at the end of _apply_)
+
+Example for showing public IP address of server:
+
+[source,hcl-terraform]
+----
+output "public_ip" {
+  value = aws_instance.example.public_ip
+  description = "The public IP address of the web server"
+}
 ----
 
 == Useful Commands and Settings
@@ -325,7 +389,13 @@ $ terraform destroy -target aws_some_resource
 $ terraform apply -target aws_some_resource
 ----
 
-== Variables
+== Input Variables
+
+To follow the DRY principle, code can be extracted into variables that have three parts:
+
+* description
+* default (optional)
+* type (for example string, number, bool, list, map, set, object, tuple, any)
 
 For example, extract the CIDR block from the following code:
 
@@ -386,10 +456,53 @@ When creating multiple variable files, the default name _terraform.tfvars_ canno
 $ terraform apply --var-file example.tfvars
 ----
 
+Example with combined types:
+
+[source,hcl-terraform]
+----
+variable "list_numeric_example" {
+  description = "An example of a numeric list in Terraform"
+  type = list(number)
+  default = [1, 2, 3]
+}
+----
+
+Example with combined, structural types:
+
+[source,hcl-terraform]
+----
+variable "object_example" {
+  description = "An example of a structural type in Terraform"
+  type = object({
+    name = string
+    age = number
+    tags = list(string)
+    enabled = bool
+  })
+  default = {
+    name = "value1"
+    age = 42
+    tags = ["a", "b", "c"]
+    enabled = true
+  }
+}
+----
+
+Using *interpolation*, a variable can also be used in the user data block:
+
+[source,hcl-terraform]
+----
+user_data = <<-EOF
+  #!/bin/bash
+  echo "Hello, World" > index.html
+  nohup busybox httpd -f -p ${var.server_port} &
+  EOF
+----
+
 == Sources
 * https://www.youtube.com/watch?v=SLB_c_ayRMo["Terraform Course - Automate your AWS cloud infrastructure"], YouTube, 2:20:57
 * https://learn.hashicorp.com[HashiCorp Learn], tutorials from HashiCorp
-
+* https://www.terraformupandrunning.com[Terraform: Up and Running, Second Edition] by Yevgeniy Brikman (O’Reilly). Copyright 2019 Yevgeniy Brikman, 978-1-492-04690-5.
 
 
 
