@@ -2,6 +2,8 @@
 
 = Terraform Workshop
 
+This workshop builds heavily on the great book "Terraform Up & Running" by Yevgeniy (Jim) Brikman, which I highly recommend reading.
+
 * https://www.terraform.io[terraform.io]: "Terraform is an open-source infrastructure as code software tool that provides a consistent CLI workflow to manage hundreds of cloud services. Terraform codifies cloud APIs into declarative configuration files."
 * written in "HashiCorp Configuration Language" (HCL) in file with .tf extension
 * support to cloud vendor via https://registry.terraform.io/browse/providers[providers], which have to be downloaded from the https://registry.terraform.io[registry] when used
@@ -498,6 +500,204 @@ user_data = <<-EOF
   nohup busybox httpd -f -p ${var.server_port} &
   EOF
 ----
+
+== Terraform State
+
+Terraform state is held as JSON in _terraform.tfstate_-file.
+
+State should never be edited outside of Terraform!
+
+State should only be stored locally on the development machine for small test projects. Normally, it is *shared* between all team members that need to work with Terraform. As soon as state is shared, a *locking mechanism* needs to be established so that not multile Terraform operations are execeuted in parallel.
+
+Although Terraform code should be stored in version control like Git, Terraform state should *not* be stored there because of
+
+* forgetting to pull the most recent state bevor executing operations with the outdated state,
+* no locking mechanism and
+* secrets would also have to be shared in Git.
+
+Solution to these problems: *Terraform built-in support for remote Backends*:
+
+* default backend = local backend
+* remote backends allow storing state remotely, for example S3, Azure Storage, Terraform Enterprise.
+* most recent state automatically loaded by Terraform
+* Terraform automatically acquires a lock when executing _apply_
+* support to store secrets encrypted remotely
+
+When using AWS, state is best managed with S3 because of
+
+* durable, available, inexpensive managed service
+* supports encryption
+* supports versioning
+
+=== Recommended Combination: S3 + Dynamo
+
+First, create S3 to store state:
+
+[source,hcl-terraform]
+----
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 3.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "us-east-2"
+}
+
+resource "aws_s3_bucket" "terraform_state" {
+
+  bucket = "terraform-up-and-running-state"
+
+  # don't delete this bucket when running "terraform destroy"
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  # version all changes
+  versioning {
+    enabled = true
+  }
+
+  # server-side encryption
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm = "AES256"
+      }
+    }
+  }
+}
+----
+
+Then, create Dynamo for locking:
+
+[source,hcl-terraform]
+----
+resource "aws_dynamodb_table" "terraform_locks" {
+  name = "terraform-up-and-running-locks"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key = "LockID"
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+}
+----
+
+Note: Primary key has to be named "LockID"!
+
+Finally, configure Terraform to use the new backend:
+
+[source,hcl-terraform]
+----
+terraform {
+  backend "s3" {
+    bucket = "terraform-up-and-running-state"
+    key = "global/s3/terraform.tfstate"
+    region = "us-east-2"
+    dynamodb_table = "terraform-up-and-running-locks"
+    encrypt = true
+  }
+}
+----
+
+After creating these files, a *terraform init* has to be performed to move the state from local to remote.
+
+Recommended output variables:
+
+[source,hcl-terraform]
+----
+output "s3_bucket_arn" {
+  value = aws_s3_bucket.terraform_state.arn
+  description = "The ARN of the S3 bucket"
+}
+output "dynamodb_table_name" {
+  value = aws_dynamodb_table.terraform_locks.name
+  description = "The name of the DynamoDB table"
+}
+----
+
+=== Use Partial Configuration to Avoid Having to Copy-Paste when Using Backends
+
+*A major drawback* of using Terraform backends is that *no variables may be used*, see https://www.terraform.io/language/settings/backends/configuration["A backend block cannot refer to named values (like input variables, locals, or data source attributes)."]
+
+Small alleviation for this inconvenience: *partial configuration* = omit some configuration and add it via _-backend-config_ when executing _terraform init_. All repeated arguments could be extracted into a file like _backend.hcl_ like this:
+
+[source,hcl-terraform]
+----
+bucket = "terraform-up-and-running-state"
+region = "us-east-2"
+dynamodb_table = "terraform-up-and-running-locks"
+encrypt = true
+----
+
+The _key_-value however must be included in the module because each module has its own key.
+
+_backend.hcl_ could be used with:
+
+[source,terminal]
+----
+$ terraform init -backend-config=backend.hcl
+----
+
+=== Isolation of State Files
+
+* nicely-written article https://charity.wtf/2016/03/30/terraform-vpc-and-why-you-want-a-tfstate-file-per-env/[Terraform, VPC, And Why You Want A TFState File Per Env]
+* good practice: use multiple terraform files and hence create multiple state files
+* avoid one error in the files to endanger all of the states
+* recommended slicing of Terraform files:
+** *separate staging* = use one set of Terraform files for each stage so that they live in *their own directory* with their own state files. *Using workspaces for this is not enough*, the files actually have to live in separate directories. For each of these files, a *different backend* has to be configured, using different credentials.
+** *separate components* like VPCs, services, databases so that changes on one doesn't pose a risk on the other. This is also done with *separating directories*.
+** all terraform files in all stages can use common _variables.tf_ and _initialize.tf_ files that are located in a *common root directory*, accessed via symlinks
+** commonly sued *modules located in _modules_-directory*
+
+Example hierarchy:
+
+[source,terminal]
+----
+.
+├── global
+│   ├── iam
+│   └── s3
+├── prod
+│   ├── data-storage
+│   ├── services
+│   │   ├── backend-app
+│   │   │   ├── outputs.tf
+│   │   │   ├── prod-backend.tf
+│   │   │   └── variables.tf
+│   │   └── frontend-app
+│   │       ├── outputs.tf
+│   │       ├── prod-frontend.tf
+│   │       └── variables.tf
+│   └── vpc
+└── stage
+    ├── data-storage
+    ├── services
+    │   ├── backend-app
+    │   │   ├── outputs.tf
+    │   │   ├── stage-backend.tf
+    │   │   └── variables.tf
+    │   └── frontend-app
+    │       ├── outputs.tf
+    │       ├── stage-frontend.tf
+    │       └── variables.tf
+    └── vpc
+----
+
+=== terraform_remote_state
+
+Problem with this approach: Resource dependencies cannot be used over multiple files.
+
+
+
+== TODO
+
+* Add proof of concept / test-delete script from https://charity.wtf/2016/03/30/terraform-vpc-and-why-you-want-a-tfstate-file-per-env/[this article], section "2. tag your tf-owned resource, and hava a kill script". Test-run in save environment.
 
 == Sources
 * https://www.youtube.com/watch?v=SLB_c_ayRMo["Terraform Course - Automate your AWS cloud infrastructure"], YouTube, 2:20:57
