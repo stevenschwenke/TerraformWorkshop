@@ -531,7 +531,7 @@ When using AWS, state is best managed with S3 because of
 
 === Recommended Combination: S3 + Dynamo
 
-First, create S3 to store state:
+First, create S3 to store state and the Dynamo to keep the lock:
 
 [source,hcl-terraform]
 ----
@@ -571,12 +571,7 @@ resource "aws_s3_bucket" "terraform_state" {
     }
   }
 }
-----
 
-Then, create Dynamo for locking:
-
-[source,hcl-terraform]
-----
 resource "aws_dynamodb_table" "terraform_locks" {
   name = "terraform-up-and-running-locks"
   billing_mode = "PAY_PER_REQUEST"
