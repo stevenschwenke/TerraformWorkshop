@@ -505,6 +505,45 @@ user_data = <<-EOF
   EOF
 ----
 
+== Data Sources
+
+Data sources are provider-specific information fetched every time Terraform is run. Definition of the data source with the name "aws_vpc" to look up data for the default VPC:
+
+[source,hcl-terraform]
+----
+data "aws_vpc" "default" {
+  default = true
+}
+----
+
+Arguments in data sources act as search filters.
+
+Usage: Datasource "aws_subnets" uses data source "aws_vpc" and is used to define an auto-scaling group:
+
+[source,hcl-terraform]
+----
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+}
+
+resource "aws_autoscaling_group" "example" {
+  launch_configuration = aws_launch_configuration.example.name
+  vpc_zone_identifier  = data.aws_subnets.default.ids
+
+  min_size = 2
+  max_size = 10
+
+  tag {
+    key                 = "Name"
+    value               = "terraform-asg-example"
+    propagate_at_launch = true
+  }
+}
+----
+
 == Terraform State
 
 Terraform state is held as JSON in _terraform.tfstate_-file.
