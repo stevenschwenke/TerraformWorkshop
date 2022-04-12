@@ -310,6 +310,7 @@ Within Terraform script, *output* can be defined like this (values from '_terraf
 # Print public IP of server after creation
 output "server_public_ip" {
   value = aws_eip.aws_eip.public_ip
+  description ="The public IP of the server"
 }
 ----
 
@@ -335,6 +336,7 @@ Output variables may contain a configuration with the following parameters:
 
 * description
 * sensitive (true, if the output should not be printed at the end of _apply_)
+* depends_on (if Terraform cannot figure out the dependencies by itself)
 
 Example for showing public IP address of server:
 
@@ -393,11 +395,13 @@ $ terraform apply -target aws_some_resource
 
 == Input Variables
 
-To follow the DRY principle, code can be extracted into variables that have three parts:
+To follow the DRY principle, code can be extracted into variables that have the following optional parameters:
 
 * description
-* default (optional)
+* default
 * type (for example string, number, bool, list, map, set, object, tuple, any)
+* validation (custom validation rules)
+* sensitive (true / false; log variable or not)
 
 For example, extract the CIDR block from the following code:
 
@@ -413,7 +417,7 @@ resource "aws_subnet" "subnet-1" {
 }
 ----
 
-The following code will ask for a value for _subnet_prefix_ when performing _terraform apply_:
+The following code uses a *variable reference* and will ask for a value for _subnet_prefix_ when performing _terraform apply_:
 
 [source,hcl-terraform]
 ----
@@ -697,7 +701,7 @@ Problem with this approach: Resource dependencies cannot be used over multiple f
 == Sources
 * https://www.youtube.com/watch?v=SLB_c_ayRMo["Terraform Course - Automate your AWS cloud infrastructure"], YouTube, 2:20:57
 * https://learn.hashicorp.com[HashiCorp Learn], tutorials from HashiCorp
-* https://www.terraformupandrunning.com[Terraform: Up and Running, Second Edition] by Yevgeniy Brikman (O’Reilly). Copyright 2019 Yevgeniy Brikman, 978-1-492-04690-5.
+* https://www.terraformupandrunning.com[Terraform: Up and Running, Third Edition by Yevgeniy Brikman (O’Reilly)]. Copyright 2022 Yevgeniy Brikman, 978-1-098-11674-3..
 
 
 
