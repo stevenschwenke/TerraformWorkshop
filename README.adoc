@@ -698,48 +698,67 @@ $ terraform init -backend-config=backend.hcl
 
 === Isolation of State Files
 
-* nicely-written article https://charity.wtf/2016/03/30/terraform-vpc-and-why-you-want-a-tfstate-file-per-env/[Terraform, VPC, And Why You Want A TFState File Per Env]
-* good practice: use multiple terraform files and hence create multiple state files
-* avoid one error in the files to endanger all of the states
-* recommended slicing of Terraform files:
-** *separate staging* = use one set of Terraform files for each stage so that they live in *their own directory* with their own state files. *Using workspaces for this is not enough*, the files actually have to live in separate directories. For each of these files, a *different backend* has to be configured, using different credentials.
-** *separate components* like VPCs, services, databases so that changes on one doesn't pose a risk on the other. This is also done with *separating directories*.
-** all terraform files in all stages can use common _variables.tf_ and _initialize.tf_ files that are located in a *common root directory*, accessed via symlinks
-** commonly sued *modules located in _modules_-directory*
+Terraform needs a valid state to work properly. Hence, the integrity of this state has to be preserved at all times, as https://charity.wtf/2016/03/30/terraform-vpc-and-why-you-want-a-tfstate-file-per-env/[the nicely-written article "Terraform, VPC, And Why You Want A TFState File Per Env"] shows.
 
-Example hierarchy:
+To keep problems isolated to, *multiple terraform files and states should be used* instead of just one.
+
+General recommendation for slicing of Terraform files:
+
+* *Separate staging*. Use one set of Terraform files for each stage so that they live in *their own directory* with their own state files. *Using workspaces for this is not enough*, the files actually have to live in separate directories. For each of these files, a *different backend* has to be configured, using different credentials.
+* *Separate components* like VPCs, services and databases so that changes on one don't pose a risk on the other. This is also done with *separating directories*.
+
+Additionally, the Terraform files themselves should be organized into different (Git) repositories:
+
+* The *module repository* is a library of project-specific resources, for example a "backend-server" implemented with AWS ECS or a "frontend-server" composed out of AWS CloudFront and S3.
+* The *live repository* uses the modules from the module repository to create the different stages.
+
+Example hierarchy of the *module repository*:
 
 [source,terminal]
 ----
 .
-├── global
-│   ├── iam
-│   └── s3
-├── prod
-│   ├── data-storage
-│   ├── services
-│   │   ├── backend-app
-│   │   │   ├── outputs.tf
-│   │   │   ├── prod-backend.tf
-│   │   │   └── variables.tf
-│   │   └── frontend-app
-│   │       ├── outputs.tf
-│   │       ├── prod-frontend.tf
-│   │       └── variables.tf
-│   └── vpc
-└── stage
-    ├── data-storage
-    ├── services
-    │   ├── backend-app
-    │   │   ├── outputs.tf
-    │   │   ├── stage-backend.tf
-    │   │   └── variables.tf
-    │   └── frontend-app
-    │       ├── outputs.tf
-    │       ├── stage-frontend.tf
-    │       └── variables.tf
-    └── vpc
+├── modules
+│   ├── ecs-server
+│   ├── pipeline
+│   │   └── create-state-resources
+│   │       ├── create-state-resources.tf
+│   │       └── terraform.tfstate
+│   ├── readme.adoc
+│   └── shared-vpc
+└── readme.adoc
 ----
+
+Example hierarchy of the *live repository*:
+
+[source,terminal]
+----
+.
+├── dev
+│   ├── 01-network
+│   │   ├── network.tf
+│   │   └── readme.adoc
+│   ├── 02-backend-server
+│   │   ├── backend-server.tf
+│   │   └── readme.adoc
+│   └── 03-frontend-server
+├── prod
+│   ├── 01-network
+│   │   ├── network.tf
+│   │   └── readme.adoc
+│   ├── 02-backend-server
+│   │   ├── backend-server.tf
+│   │   └── readme.adoc
+│   └── 03-frontend-server
+└── readme.adoc
+----
+
+The live repository references the modules from the module repository via relative paths.
+
+The code for creating the S3 bucket and Dynamo for keeping the remote Terraform state are located in the modules repository in the _create-state-resources_ folder.
+
+All terraform files in all stages can use common _variables.tf_ and _initialize.tf_ files that are located in a *common root directory*, accessed via symlinks or relative paths.
+
+
 
 === terraform_remote_state
 
