@@ -675,7 +675,7 @@ output "dynamodb_table_name" {
 
 === Use Partial Configuration to Avoid Having to Copy-Paste when Using Backends
 
-*A major drawback* of using Terraform backends is that *no variables may be used*, see https://www.terraform.io/language/settings/backends/configuration["A backend block cannot refer to named values (like input variables, locals, or data source attributes)."]
+*A major drawback* of using Terraform backends is that *no variables may be used* in the _backend_-part of the configuration. Hence, the bucket name, region and dynamo table name have to be copied by hand to every module, see https://www.terraform.io/language/settings/backends/configuration["A backend block cannot refer to named values (like input variables, locals, or data source attributes)."]
 
 Small alleviation for this inconvenience: *partial configuration* = omit some configuration and add it via _-backend-config_ when executing _terraform init_. All repeated arguments could be extracted into a file like _backend.hcl_ like this:
 
