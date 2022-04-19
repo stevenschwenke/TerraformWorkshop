@@ -1007,6 +1007,57 @@ module.my_module.some_variable
 
 * Add proof of concept / test-delete script from https://charity.wtf/2016/03/30/terraform-vpc-and-why-you-want-a-tfstate-file-per-env/[this article], section "2. tag your tf-owned resource, and hava a kill script". Test-run in save environment.
 
+
+=== Control Structures
+
+*This section is only a stub and has to be completed.*
+
+==== Loops
+
+===== Loops with Count Parameter
+
+Create three unique IAM users:
+
+[source,hcl-terraform]
+----
+resource "aws_iam_user" "example" {
+  count = 3
+  name  = "neo.${count.index}"
+}
+----
+
+Same example with better names:
+
+[source,hcl-terraform]
+----
+variable "user_names" {
+  description = "Create IAM users with these names"
+  type        = list(string)
+  default     = ["neo", "trinity", "morpheus"]
+}
+
+resource "aws_iam_user" "example" {
+  count = length(var.user_names)
+  name  = var.user_names[count.index]
+}
+----
+
+Drawback of using _count_: The items in the list are represented by their position in the list. Deleting one item in the middle will move the last item instead of just deleting one!
+
+===== Loops with for_each Expressions
+
+Loop over lists, sets, maps. For example, create the three IAM users from above:
+
+[source,hcl-terraform]
+----
+resource "aws_iam_user" "example" {
+  for_each = toset(var.user_names)
+  name     = each.value
+}
+----
+
+In contrast to the version using _count_, this approach enables deletions of users, even in the middle of the list.
+
 == Sources
 * https://www.youtube.com/watch?v=SLB_c_ayRMo["Terraform Course - Automate your AWS cloud infrastructure"], YouTube, 2:20:57
 * https://learn.hashicorp.com[HashiCorp Learn], tutorials from HashiCorp
