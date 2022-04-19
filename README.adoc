@@ -704,12 +704,12 @@ To keep problems isolated to, *multiple terraform files and states should be use
 
 General recommendation for slicing of Terraform files:
 
-* *Separate staging*. Use one set of Terraform files for each stage so that they live in *their own directory* with their own state files. *Using workspaces for this is not enough*, the files actually have to live in separate directories. For each of these files, a *different backend* has to be configured, using different credentials.
+* *Separate staging* (dev, qa, prod). Use one set of Terraform files for each stage so that they live in *their own directory* with their own state files. *Using workspaces for this is not enough* because confusing workspaces on the command line is easy because the user has to explicitly choose the correct workspace. Also, all workspaces share the same S3 bucket to store their state in. Hence, the Terraform files have to live in separate directories. For each of these files, a *different backend* has to be configured, using different credentials. In AWS, this can be achieved by using *different AWS accounts for the stages*.
 * *Separate components* like VPCs, services and databases so that changes on one don't pose a risk on the other. This is also done with *separating directories*.
 
 Additionally, the Terraform files themselves should be organized into different (Git) repositories:
 
-* The *module repository* is a library of project-specific resources, for example a "backend-server" implemented with AWS ECS or a "frontend-server" composed out of AWS CloudFront and S3.
+* The *module repository* is a library of project-specific resources that are typically deployed together, for example a "backend-server" implemented with AWS ECS or a "frontend-server" composed out of AWS CloudFront and S3.
 * The *live repository* uses the modules from the module repository to create the different stages.
 
 Example hierarchy of the *module repository*:
@@ -762,7 +762,20 @@ All terraform files in all stages can use common _variables.tf_ and _initialize.
 
 === terraform_remote_state
 
-Problem with this approach: Resource dependencies cannot be used over multiple files.
+Problem with isolating Terraform files from each other: Resource dependencies cannot be used over multiple files.
+
+One solution: Read information from the Terraform state. The following example reads address and port of a previously created database to print them on a web page, provided by a simple web server:
+
+[source,hcl-terraform]
+----
+user_data = <<EOF
+#!/bin/bash
+echo "Hello, World" >> index.html
+echo "${data.terraform_remote_state.db.outputs.address}" >> index.html
+echo "${data.terraform_remote_state.db.outputs.port}" >> index.html
+nohup busybox httpd -f -p ${var.server_port} &
+EOF
+----
 
 
 
