@@ -777,7 +777,71 @@ nohup busybox httpd -f -p ${var.server_port} &
 EOF
 ----
 
+== Built-In Functions and the Terraform Console
 
+Terraform offers built-in functions for
+
+* numeric conversion
+* string manipulation
+* working with collections
+* encoding
+* filesystem
+* data and time
+* hash and crypto
+* IP network
+* type conversion
+
+A full list https://www.terraform.io/language/functions[can be found here]
+
+A good way to test these functions is via the Terraform console.
+
+The following example shows how to start the console and format a number:
+
+[source,terminal]
+----
+$ terraform console
+> format("%.3f", 3.1465468)
+"3.147"
+>
+----
+
+The remote state example above included a shell script as _user_data_ directly in the Terraform file:
+
+[source,hcl-terraform]
+----
+user_data = <<EOF
+#!/bin/bash
+echo "Hello, World" >> index.html
+echo "${data.terraform_remote_state.db.outputs.address}" >> index.html
+echo "${data.terraform_remote_state.db.outputs.port}" >> index.html
+nohup busybox httpd -f -p ${var.server_port} &
+EOF
+----
+
+With Terraform functions, this can be altered to:
+
+.user-data.sh
+[source,shell script]
+----
+#!/bin/bash
+
+cat > index.html <<EOF
+<h1>Hello, World</h1>
+<p>DB address: ${db_address}</p>
+<p>DB port: ${db_port}</p>
+EOF
+
+nohup busybox httpd -f -p ${server_port} &
+----
+
+[source,hcl-terraform]
+----
+user_data = templatefile("user-data.sh", {
+    server_port = var.server_port
+    db_address  = data.terraform_remote_state.db.outputs.address
+    db_port     = data.terraform_remote_state.db.outputs.port
+  })
+----
 
 == TODO
 
