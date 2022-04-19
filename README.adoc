@@ -50,7 +50,11 @@ resource "aws_instance" "my-instance" {
 
 **AMI-IDs are region-specific! When copy-pasting an ID from the web console, make sure to select the right region.**
 
-In the directory where the above file is located, Terraform has to be initiated to download all the necessary providers into the folder _.terraform_:
+In the directory where the above file is located, Terraform has to be initiated by calling _terraform init_ to
+
+* download all the necessary providers into the folder _.terraform_
+* configure the backend (see next sections)
+* downloading modules (see next sections)
 
 [source,terminal]
 ----
@@ -752,13 +756,36 @@ Example hierarchy of the *live repository*:
 └── readme.adoc
 ----
 
-The live repository references the modules from the module repository via relative paths.
-
 The code for creating the S3 bucket and Dynamo for keeping the remote Terraform state are located in the modules repository in the _create-state-resources_ folder.
 
 All terraform files in all stages can use common _variables.tf_ and _initialize.tf_ files that are located in a *common root directory*, accessed via symlinks or relative paths.
 
+==== Versioning of Modules Repository
 
+The live repository references the modules from the module repository via relative paths. Because the modules repository will have different versions with different resources, it is important to reference the correct version from the live repository. For example, a new version of the resources should be tested in a _dev_ stage but not immediately used in the _prod_ stage.
+
+Although Terraform modules have not been introduced yet, here's how they are referenced from the root module using relative paths:
+
+[source,hcl-terraform]
+----
+provider "aws" {
+region = "us-east-2"
+}
+
+module "webserver_cluster" {
+source = "../../../modules/ecs-server/server"
+}
+----
+
+This approach does not allow for multiple stages referencing different versions of the modules repository. This can be solved by versioning the modules repository with Git and referencing the commits in this Git repository.
+
+A https://www.terraform.io/language/modules/sources[generic Git repository can be referenced with any URL that is accepted by the git checkout command]:
+
+* selecting a *release*: _source = "git::https://example.com/vpc.git?ref=v1.2.0"_
+* selecting a *commit* via SHA-1 hash: _source = "git::https://example.com/storage.git?ref=51d462976d84fdea54b47d80dcabbf680badcdb8"_
+* selecting a *tag*: _source = "git::https://example.com/storage.git?ref=mytag"_
+
+For easier reading, the rest of this workshop uses the relative file notation.
 
 === terraform_remote_state
 
@@ -841,6 +868,139 @@ user_data = templatefile("user-data.sh", {
     db_address  = data.terraform_remote_state.db.outputs.address
     db_port     = data.terraform_remote_state.db.outputs.port
   })
+----
+
+When referencing files that live in modules (for example, if the _user-data.sh_ file would be located in a module), the relative path can be defined like this:
+
+[source,hcl-terraform]
+----
+user_data = templatefile("${path.module}/user-data.sh", {
+    server_port = var.server_port
+    db_address  = data.terraform_remote_state.db.outputs.address
+    db_port     = data.terraform_remote_state.db.outputs.port
+  })
+----
+
+The path of the referenced _user-data.sh_ file can be prefixed with:
+
+* _path.module_ for a path relative to the module
+* _path.root_ for a path relative to the root module
+* _path.cwd_ for a path relative to the current work directory (normally equal to _path.root_, but may differ)
+
+
+== Terraform Modules
+
+Every folder with Terraform files is a "module".
+
+If _apply_ is executed in a module, it is called a *root module*.
+
+Modules should not have a _provider_-section because these are defined by the user of the module (the root module).
+
+Use a module:
+
+[source,hcl-terraform]
+----
+provider "aws" {
+  region = "us-east-2"
+}
+
+module "webserver_cluster" {
+  source = "../../../modules/ecs-server/server"
+}
+----
+
+After adding a module, _init_ has to be called!
+
+To make the modules usable in different stages and even for different projects, they have to have dynamic values such as names, using input variables:
+
+[source, hcl-terraform]
+----
+resource "aws_security_group" "alb" {
+  name = "${var.cluster_name}-alb"
+}
+
+resource "aws_security_group_rule" "allow_http_inbound" {
+  type              = "ingress"
+  security_group_id = aws_security_group.alb.id
+
+  from_port   = 80
+  to_port     = 80
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+}
+
+resource "aws_security_group_rule" "allow_all_outbound" {
+  type              = "egress"
+  security_group_id = aws_security_group.alb.id
+
+  from_port   = 0
+  to_port     = 0
+  protocol    = "-1"
+  cidr_blocks = ["0.0.0.0/0"]
+}
+----
+
+The backend configuration has to be modified, too:
+
+[source,hcl-terraform]
+----
+data "terraform_remote_state" "db" {
+  backend = "s3"
+
+  config = {
+    bucket = var.db_remote_state_bucket
+    key    = var.db_remote_state_key
+    region = "us-east-2"
+  }
+}
+----
+
+The above inputs have to be set with:
+
+[source,hcl-terraform]
+----
+module "webserver_cluster" {
+  source = "../../../modules/services/webserver-cluster"
+
+  cluster_name           = "webservers-stage"
+  db_remote_state_bucket = "(YOUR_BUCKET_NAME)"
+  db_remote_state_key    = "stage/data-stores/mysql/terraform.tfstate"
+}
+----
+
+=== Module Locals
+
+In general, values should only be defined once, for example using input variables. This is also true for values in modules that need to be used in multiple places within the module, like port numbers or CIDR blocks. The best way of defining module-internal values are _module locals_ that only define values within the current module and cannot be overridden from the outside (like input variables):
+
+[source,hcl-terraform]
+----
+locals {
+  http_port    = 80
+  any_port     = 0
+  any_protocol = "-1"
+  tcp_protocol = "tcp"
+  all_ips      = ["0.0.0.0/0"]
+}
+----
+
+Usage with "_local.variable_name_":
+
+[source,hcl-terraform]
+----
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.example.arn
+  port              = local.http_port
+  protocol          = "HTTP"
+...
+----
+
+=== Module Outputs
+
+Output variables of modules can be accessed like this:
+
+[source,hcl-terraform]
+----
+module.my_module.some_variable
 ----
 
 == TODO
