@@ -683,6 +683,7 @@ output "dynamodb_table_name" {
 
 Small alleviation for this inconvenience: *partial configuration* = omit some configuration and add it via _-backend-config_ when executing _terraform init_. All repeated arguments could be extracted into a file like _backend.hcl_ like this:
 
+.backend.hcl
 [source,hcl-terraform]
 ----
 bucket = "terraform-up-and-running-state"
@@ -1002,6 +1003,158 @@ Output variables of modules can be accessed like this:
 ----
 module.my_module.some_variable
 ----
+
+== Managing Secrets
+
+Most likely places where secrets are needed when working with Terraform:
+
+1. Providers
+2. Resources and data sources
+3. State files and plan files
+
+=== Providers
+
+*Credentials should never be stored in Terraform files!*
+
+[source,hcl-terraform]
+----
+provider "aws" {
+  region = "us-east-2"
+
+  # DO NOT DO THIS!!!
+  access_key = "(ACCESS_KEY)"
+  secret_key = "(SECRET_KEY)"
+  # DO NOT DO THIS!!!
+}
+----
+
+Good option for human users as well as machine users (CI/CD) is to store them as *environment variables*:
+
+[source,shell script]
+----
+$  export AWS_ACCESS_KEY_ID=(MY_ACCESS_KEY_ID)
+$  export AWS_SECRET_ACCESS_KEY=(MY_SECRET_ACCESS_KEY)
+----
+
+(Note leading space before _export_, disables adding this command to the shell's history.)
+
+However, secrets must be stored somewhere on developer's computer, for example in a secret store.
+
+Many CI/CD tools offer a way to enter credentials safely and expose them via environment variables at runtime.
+
+=== Resources and Data Sources
+
+[source,hcl-terraform]
+----
+resource "aws_db_instance" "example" {
+  identifier_prefix   = "terraform-up-and-running"
+  engine              = "mysql"
+  allocated_storage   = 10
+  instance_class      = "db.t2.micro"
+  skip_final_snapshot = true
+  db_name             = var.db_name
+
+  # DO NOT DO THIS!!!
+  username = "admin"
+  password = "password"
+  # DO NOT DO THIS!!!
+}
+----
+
+==== Option: Environment Variables
+
+First, create variables for the credentials:
+
+[source,hcl-terraform]
+----
+variable "db_username" {
+  description = "The username for the database"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_password" {
+  description = "The password for the database"
+  type        = string
+  sensitive   = true
+}
+----
+
+Use variables:
+
+[source,hcl-terraform]
+----
+resource "aws_db_instance" "example" {
+  identifier_prefix   = "terraform-up-and-running"
+  engine              = "mysql"
+  allocated_storage   = 10
+  instance_class      = "db.t2.micro"
+  skip_final_snapshot = true
+  db_name             = var.db_name
+
+  username = var.db_username
+  password = var.db_password
+}
+----
+
+Set variables as environment variables:
+
+[source,shell script]
+----
+$  export TF_VAR_db_username=(DB_USERNAME)
+$  export TF_VAR_db_password=(DB_PASSWORD)
+----
+
+Explicitly document that the secrets have to be exported as environment variables! This is not obvious from the Terraform code alone.
+
+==== Option: Encrypted Files
+
+General idea: Encrypt secrets with a key, store cipher text in file and put that file in version control. Key is managed with Key Management Service (KMS) of cloud provider.
+
+However, this approach is tedious and error-prone.
+
+==== Option: Secret Stores
+
+Secret stores are services offered by the cloud providers to store the secrets for you and integrate the secret-requests into where the secrets are needed. Examples are AWS Secrets Manager or HashiCorp Vault.
+
+After creating a secret with the name _db-creds_ in JSON format, it can be referenced with
+
+[source, hcl-terraform]
+----
+data "aws_secretsmanager_secret_version" "creds" {
+  secret_id = "db-creds"
+}
+----
+
+... and converted from JSON with
+
+[source,hcl-terraform]
+----
+locals {
+  db_creds = jsondecode(
+    data.aws_secretsmanager_secret_version.creds.secret_string
+  )
+}
+
+resource "aws_db_instance" "example" {
+  identifier_prefix   = "terraform-up-and-running"
+  engine              = "mysql"
+  allocated_storage   = 10
+  instance_class      = "db.t2.micro"
+  skip_final_snapshot = true
+  db_name             = var.db_name
+
+  username = local.db_creds.username
+  password = local.db_creds.password
+}
+----
+
+
+=== State Files and Plan Files
+
+*Every secret used by Terraform will end up as plain text in the state file!* The way how the secret was introduced into Terraform doesn't matter.
+
+Hence, the backend files should be kept in a store that supports encryption, like AWS S3.
 
 == TODO
 
