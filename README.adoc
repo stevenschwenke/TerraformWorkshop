@@ -2,7 +2,7 @@
 
 = Terraform Workshop
 
-This workshop builds heavily on the great book "Terraform Up & Running" by Yevgeniy (Jim) Brikman, which I highly recommend reading.
+This workshop builds heavily on the great book "Terraform Up & Running" by Yevgeniy (Jim) Brikman, which I highly recommend reading. The author publishes his examples https://github.com/brikis98/terraform-up-and-running-code[on GitHub].
 
 * https://www.terraform.io[terraform.io]: "Terraform is an open-source infrastructure as code software tool that provides a consistent CLI workflow to manage hundreds of cloud services. Terraform codifies cloud APIs into declarative configuration files."
 * written in "HashiCorp Configuration Language" (HCL) in file with .tf extension
