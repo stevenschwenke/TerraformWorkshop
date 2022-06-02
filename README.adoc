@@ -1156,9 +1156,213 @@ resource "aws_db_instance" "example" {
 
 Hence, the backend files should be kept in a store that supports encryption, like AWS S3.
 
-== TODO
 
-* Add proof of concept / test-delete script from https://charity.wtf/2016/03/30/terraform-vpc-and-why-you-want-a-tfstate-file-per-env/[this article], section "2. tag your tf-owned resource, and hava a kill script". Test-run in save environment.
+== Multi-Provider Setup
+
+* provider = plugins written by community and cloud vendors
+* Terraform core calls provider code (written in Go) via RPC which call the clouds via HTTP via their CLIs
+
+Usual provider setup consists of two blocks. The first block declares which provider to use:
+
+[source,hcl-terraform]
+----
+terraform {
+  required_providers {
+    aws = {
+        source  = "hashicorp/aws"
+        version = "~> 4.0"
+    }
+  }
+}
+----
+
+Here,
+
+* "aws" is the local name used for the provider in this module.
+* "source" is the URL where Terraform downloads the provider in the format [<HOSTNAME>/]<NAMESPACE>/<TYPE>
+* "version" for the version to install, details see https://www.terraform.io/language/expressions/version-constraints[Terraform documentation]
+
+The second block configures that provider:
+
+[source,hcl-terraform]
+----
+provider "aws" {
+  region = "us-east-2"
+}
+----
+
+=== Multiple AWS Regions
+
+Aliases are used to differentiate between multiple providers:
+
+[source,hcl-terraform]
+----
+provider "aws" {
+    region = "us-east-2"
+    alias  = "region_us_east_2"
+}
+
+provider "aws" {
+    region = "us-west-1"
+    alias  = "region_us_west_1"
+}
+----
+
+Use that providers by adding _provider_ to a data source or resource definition:
+
+[source,hcl-terraform]
+----
+data "aws_region" "region_1" {
+  provider = aws.region_us_east_2
+}
+
+data "aws_region" "region_2" {
+  provider = aws.region_us_west_1
+}
+----
+
+[source,hcl-terraform]
+----
+resource "aws_instance" "region_1" {
+  provider = aws.region_us_east_2
+
+  # different AMI IDs
+  ami           = "ami-0fb653ca2d3203ac1"
+  instance_type = "t2.micro"
+}
+
+resource "aws_instance" "region_2" {
+  provider = aws.region_us_west_1
+
+  # different AMI IDs
+  ami           = "ami-01f87c43e618bf8f0"
+  instance_type = "t2.micro"
+}
+----
+
+==== Detect Region-Specific AMI IDs
+
+[source,hcl-terraform]
+----
+data "aws_ami" "ubuntu_region_1" {
+  provider = aws.region_us_east_2
+
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+  }
+}
+
+data "aws_ami" "ubuntu_region_2" {
+  provider = aws.region_us_west_1
+
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+  }
+}
+
+resource "aws_instance" "region_1" {
+  provider = aws.region_us_east_2
+
+  ami           = data.aws_ami.ubuntu_region_1.id
+  instance_type = "t2.micro"
+}
+
+resource "aws_instance" "region_2" {
+  provider = aws.region_us_east_2
+
+  ami           = data.aws_ami.ubuntu_region_2.id
+  instance_type = "t2.micro"
+}
+----
+
+=== Multiple AWS Accounts
+
+In general, Amazon recommends to use different accounts for different stages like development, quality assurance and production. These stages should be isolated from each other! However, sometimes it makes sense to deploy resources in multiple AWS accounts. *This couples these accounts together and should only be done rarely*.
+
+To target multiple AWS accounts from one Terraform script, use the same procedure as above with multiple regions:
+
+[source,hcl-terraform]
+----
+provider "aws" {
+    region = "us-east-2"
+    alias  = "parent"
+}
+
+provider "aws" {
+  region = "us-east-2"
+  alias  = "child"
+
+  assume_role {
+    role_arn = "arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>"
+  }
+}
+----
+
+This can be used to set up resources and data sources like this:
+
+[source,hcl-terraform]
+----
+data "aws_caller_identity" "parent" {
+  provider = aws.parent
+}
+
+data "aws_caller_identity" "child" {
+  provider = aws.child
+}
+----
+
+To allow modules to be used in multiple accounts, _configuration aliases_ are used:
+
+.module/main.tf
+[source,hcl-terraform]
+----
+terraform {
+  required_providers {
+    aws = {
+      source                = "hashicorp/aws"
+      version               = "~> 4.0"
+      configuration_aliases = [aws.parent, aws.child]
+    }
+  }
+}
+----
+
+Configuration aliases don't create providers themselves, they only use configurations via a providers map:
+
+.live/.main.tf
+[source,hcl-terraform]
+----
+provider "aws" {
+  region = "us-east-2"
+  alias  = "parent"
+}
+
+provider "aws" {
+  region = "us-east-2"
+  alias  = "child"
+
+  assume_role {
+    role_arn = "arn:aws:iam::222222222222:role/OrganizationAccountAccessRole"
+  }
+}
+
+module "multi_account_example" {
+  source = "../../modules/multi-account"
+
+  providers = {
+    aws.parent = aws.parent
+    aws.child  = aws.child
+  }
+}
+----
 
 
 === Control Structures
