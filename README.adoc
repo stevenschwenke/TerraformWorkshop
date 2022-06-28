@@ -275,7 +275,7 @@ Output of _terraform graph_ is written in DOT and can be converted to images usi
 
 When starting an EC2 instance, user data can be defined to run some script after creation of the instance.
 
-.03-practice-project/main.tf
+.04-practice-project/main.tf
 [source,hcl-terraform]
 ----
 resource "aws_instance" "web-server-instance" {
@@ -347,6 +347,32 @@ Example for showing public IP address of server:
 output "public_ip" {
   value = aws_instance.example.public_ip
   description = "The public IP address of the web server"
+}
+----
+
+More examples see:
+
+.03-output-variables/outputs.tf
+[source,hcl-terraform]
+----
+output "subnet_arn" {
+  description = "ARN of subnet"
+  value = aws_subnet.subnet-1.arn
+}
+
+output "vpc_arn" {
+  description = "ARN of vpc"
+  value = aws_vpc.vpc-1.arn
+}
+
+output "subnet_tags" {
+  description = "Tags of subnet"
+  value = aws_subnet.subnet-1.tags
+}
+
+output "vpc_tags" {
+  description = "Tags of vpc"
+  value = aws_vpc.vpc-1.tags
 }
 ----
 
