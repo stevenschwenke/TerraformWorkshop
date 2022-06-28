@@ -235,8 +235,6 @@ To destroy all resources defined in the files in the current directory and creat
 $ terraform destroy
 ----
 
-Also, resources existing in AWS but not defined in Terraform will be deleted when executing _Terraform apply_.
-
 == Referencing Resources
 
 References to other resources are done with the <resource_type>.<resource_name>.id like in this example:
