@@ -7,12 +7,27 @@ terraform {
   }
 }
 
+# Define variables for AWS credentials. Provide with env variables!
+# export TF_VAR_access_key=your_access_key
+variable "access_key" {
+  description = "Access key from AWS IAM"
+  type        = string
+  sensitive   = true
+}
+
+# export TF_VAR_secret_key=your_secret_key
+variable "secret_key" {
+  description = "Secret key from AWS IAM"
+  type        = string
+  sensitive   = true
+}
+
 # Configure the AWS Provider
 provider "aws" {
   region = "us-east-1"
 
-  access_key = "your-access-key"
-  secret_key = "your-secret-key"
+  access_key = var.access_key
+  secret_key = var.secret_key
 
 }
 
