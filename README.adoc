@@ -275,7 +275,7 @@ Output of _terraform graph_ is written in DOT and can be converted to images usi
 
 When starting an EC2 instance, user data can be defined to run some script after creation of the instance.
 
-.04-practice-project/main.tf
+.05-practice-project/main.tf
 [source,hcl-terraform]
 ----
 resource "aws_instance" "web-server-instance" {
