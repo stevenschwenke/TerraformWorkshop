@@ -55,8 +55,25 @@ extract_aws_credentials() {
 
 printf "This helps you set the credentials of a specific AWS profile as environment variables.\n"
 printf "Your AWS profiles:\n\n"
-awk '/\[/ { if (NR > 1) print }' ~/.aws/credentials
-printf "\n"
-read "profile?Which of these profiles should be set as environment variables? "
 
-extract_aws_credentials "$profile"
+# Store profile names in an array and display them with their indices
+profile_names=($(awk '/\[/ { if (NR > 1) {gsub(/\[|\]/, ""); print}}' ~/.aws/credentials))
+index=1
+for profile in "${profile_names[@]}"; do
+  printf "%d) %s\n" $index $profile
+  index=$((index + 1))
+done
+printf "\n"
+
+# Let the user enter the index of the profile they want to use
+read "profile_index?Which of these profiles should be set as environment variables? (Enter the number) "
+
+# Check if the entered index is valid
+if [ "$profile_index" -gt 0 ] && [ "$profile_index" -le "${#profile_names[@]}" ]; then
+  # Use the index to access the profile name from the array
+  selected_profile="${profile_names[$profile_index]}"
+  extract_aws_credentials "$selected_profile"
+else
+  printf "Invalid profile number. Exiting.\n"
+  exit 1
+fi
