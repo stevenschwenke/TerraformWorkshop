@@ -11,19 +11,31 @@ clean() {
 
   local directory=$1
 
-  printf "%s :\n\n" "$directory"
+  printf "Cleaning %s ...\n" "$directory"
   cd "$directory" || exit 1
 
-  printf "Destroying Terraform resources ..."
+
+# Check if the directory contains a Terraform directory
+  if [ ! -d .terraform ]; then
+    printf "No Terraform file found, skipping.\n\n"
+    cd ..
+    return 0
+  fi
+
+  printf "Destroying Terraform resources ...\n"
   terraform destroy -auto-approve
 
   printf "Removing Terraform files ...\n"
   rm -rf .terraform* 2>/dev/null
   rm terraform*
 
-  printf "Done cleaning %s\n" "$directory"
+  printf "Done cleaning %s.\n\n" "$directory"
   cd ..
 }
+
+clear
+
+printf "This will clean up all Terraform files and resources.\n\n"
 
 clean 01-create-ec2
 clean 02-referencing-resources
